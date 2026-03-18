@@ -61,7 +61,11 @@ export function stopExpo(userId: string): boolean {
   return true;
 }
 
-  // Use a public URL for web redirection
-  // e.g. codeit.brickvue.com/u/<userId> or similar
+export function getExpoUrl(userId: string): string {
+  // Use a public URL for web redirection that matches the proxy config
+  // e.g. codeit.brickvue.com/u/<userId> proxies to localhost:<port>
+  const port = getExpoPort(userId);
   return `https://codeit.brickvue.com/u/${userId}`;
+  // If your proxy is not set up, you can also return the direct port for testing:
+  // return `http://localhost:${port}`;
 }

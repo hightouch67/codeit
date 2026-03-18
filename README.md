@@ -62,7 +62,7 @@ cd app && npx expo start
 ```
 
 ## Workflow
-
+0. User launch his app, (a copy of our boilerplate)
 1. User opens the app and taps the chat bubble
 2. Types a prompt describing desired changes
 3. Backend queues a job and streams status via WebSocket
