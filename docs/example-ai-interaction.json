@@ -1,0 +1,24 @@
+{
+  "example_prompt": "Add a settings screen with a toggle for dark mode and a text input for the user's name. Include navigation to it from the home screen.",
+  "example_response": {
+    "operations": [
+      {
+        "type": "create_file",
+        "path": "screens/SettingsScreen.tsx",
+        "content": "import React, { useState } from 'react';\nimport { View, Text, Switch, TextInput, StyleSheet, ScrollView } from 'react-native';\nimport { useTheme } from '../hooks/useTheme';\nimport { spacing, fontSize, borderRadius } from '../theme';\n\nexport default function SettingsScreen() {\n  const theme = useTheme();\n  const [darkMode, setDarkMode] = useState(false);\n  const [name, setName] = useState('');\n\n  return (\n    <ScrollView\n      style={[styles.container, { backgroundColor: theme.background }]}\n      contentContainerStyle={styles.content}\n    >\n      <Text style={[styles.title, { color: theme.text }]}>Settings</Text>\n\n      <View style={[styles.row, { borderBottomColor: theme.border }]}>\n        <Text style={[styles.label, { color: theme.text }]}>Dark Mode</Text>\n        <Switch value={darkMode} onValueChange={setDarkMode} />\n      </View>\n\n      <View style={styles.field}>\n        <Text style={[styles.label, { color: theme.text }]}>Your Name</Text>\n        <TextInput\n          style={[styles.input, { backgroundColor: theme.surface, color: theme.text, borderColor: theme.border }]}\n          value={name}\n          onChangeText={setName}\n          placeholder=\"Enter your name\"\n          placeholderTextColor={theme.textSecondary}\n        />\n      </View>\n    </ScrollView>\n  );\n}\n\nconst styles = StyleSheet.create({\n  container: { flex: 1 },\n  content: { padding: 24 },\n  title: { fontSize: 24, fontWeight: '700', marginBottom: 24 },\n  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 16, borderBottomWidth: 1 },\n  label: { fontSize: 16 },\n  field: { marginTop: 24 },\n  input: { marginTop: 8, borderWidth: 1, borderRadius: 8, padding: 12, fontSize: 16 },\n});"
+      },
+      {
+        "type": "create_file",
+        "path": "app/settings.tsx",
+        "content": "import React from 'react';\nimport SettingsScreen from '../screens/SettingsScreen';\n\nexport default function Settings() {\n  return <SettingsScreen />;\n}"
+      },
+      {
+        "type": "update_file",
+        "path": "screens/HomeScreen.tsx",
+        "diff": "--- a/screens/HomeScreen.tsx\n+++ b/screens/HomeScreen.tsx\n@@ -1,5 +1,6 @@\n import React from 'react';\n-import { View, Text, StyleSheet, ScrollView } from 'react-native';\n+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';\n+import { useRouter } from 'expo-router';\n import { useTheme } from '../hooks/useTheme';\n import { spacing, fontSize, borderRadius } from '../theme';\n \n@@ -7,6 +8,7 @@\n export default function HomeScreen() {\n   const theme = useTheme();\n+  const router = useRouter();\n \n   return (\n     <ScrollView\n@@ -30,6 +32,14 @@\n           )}\n         </View>\n       </View>\n+\n+      <TouchableOpacity\n+        style={[styles.settingsBtn, { backgroundColor: theme.primary }]}\n+        onPress={() => router.push('/settings')}\n+      >\n+        <Text style={styles.settingsBtnText}>Open Settings</Text>\n+      </TouchableOpacity>\n     </ScrollView>\n   );\n }"
+      }
+    ],
+    "summary": "Added SettingsScreen with dark mode toggle and name input, created Expo Router page, and added navigation button to HomeScreen.",
+    "reasoning": "Created a new screen following existing patterns (useTheme, StyleSheet). Used Expo Router for navigation. Added a touch target on the home screen for discoverability."
+  }
+}

@@ -1,0 +1,17 @@
+# CodeIt Workspace Container
+# Used for running validation inside ephemeral containers
+FROM node:20-slim
+
+# Install git and basic tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install global tools
+RUN npm install -g typescript expo-cli@latest
+
+# Create workspace directory
+WORKDIR /workspace
+
+# Default command: echo ready (overridden at runtime)
+CMD ["echo", "workspace-ready"]

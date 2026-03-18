@@ -1,0 +1,47 @@
+version: "3.8"
+
+services:
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: codeit-server
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - NODE_ENV=production
+      - AI_BASE_URL=${AI_BASE_URL:-http://host.docker.internal:11434}
+      - AI_MODEL=${AI_MODEL:-qwen3.5}
+      - AI_API_KEY=${AI_API_KEY:-}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - GITHUB_ORG=${GITHUB_ORG:-}
+      - GIT_REPOS_DIR=/data/repos
+      - BOILERPLATE_DIR=/app/boilerplate
+      - DOCKER_ENABLED=false
+      - MAX_RETRIES=2
+    volumes:
+      - codeit-repos:/data/repos
+      - ./app:/app/boilerplate:ro
+    restart: unless-stopped
+    networks:
+      - codeit-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: codeit-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    networks:
+      - codeit-network
+
+volumes:
+  codeit-repos:
+  redis-data:
+
+networks:
+  codeit-network:
+    driver: bridge
