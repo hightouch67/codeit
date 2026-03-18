@@ -1,0 +1,18 @@
+# CodeIt Expo Workspace Dockerfile
+FROM node:20-slim
+
+# Install git, expo CLI, and dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install expo CLI globally (matching your app version)
+RUN npm install -g expo@54.0.33
+
+# Set up workspace
+WORKDIR /workspace
+
+# Expose default Expo web port (will be mapped per user)
+EXPOSE 8081
+
+CMD ["bash"]

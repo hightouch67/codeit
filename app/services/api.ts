@@ -27,8 +27,9 @@ async function request<T>(path: string, options: ApiOptions = {}): Promise<T> {
 }
 
 export const api = {
-  get: <T>(path: string) => request<T>(path),
-  post: <T>(path: string, body: unknown) => request<T>(path, { method: 'POST', body }),
+  get: <T>(path: string, headers?: Record<string, string>) => request<T>(path, { headers }),
+  post: <T>(path: string, body?: unknown, headers?: Record<string, string>) => request<T>(path, { method: 'POST', body, headers }),
+  baseUrl: config.apiUrl,
 };
 
 export interface SendPromptPayload {

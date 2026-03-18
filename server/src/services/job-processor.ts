@@ -78,13 +78,21 @@ export async function processJob(job: Job): Promise<void> {
     const commitMessage = `ai: ${aiResult.summary}\n\nPrompt: ${job.prompt.substring(0, 200)}`;
     const sha = await commitAndPush(repoPath, commitMessage, true);
 
-    // Done
+    // Done — report partial failures clearly
+    const patchWarning = applyResult.errors.length > 0
+      ? ` (${applyResult.errors.length} file(s) skipped: ${applyResult.errors.join('; ')})`
+      : '';
+
     jobQueue.updateStatus(job.id, 'completed', {
       commitSha: sha,
-      message: aiResult.summary,
+      message: aiResult.summary + patchWarning,
     });
 
-    console.log(`[Worker] Job ${job.id} completed successfully. Commit: ${sha}`);
+    if (applyResult.errors.length > 0) {
+      console.warn(`[Worker] Job ${job.id} completed with patch errors:`, applyResult.errors);
+    } else {
+      console.log(`[Worker] Job ${job.id} completed successfully. Commit: ${sha}`);
+    }
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
     console.error(`[Worker] Job ${job.id} failed: ${errorMsg}`);

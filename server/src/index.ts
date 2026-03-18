@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { createServer } from 'http';
 import { env } from './config/index.js';
-import { jobsRouter, healthRouter } from './controllers/index.js';
+import { jobsRouter, healthRouter, authRouter, appRouter } from './controllers/index.js';
 import { wsManager } from './middleware/index.js';
 import { jobQueue } from './queue/index.js';
 import { processJob } from './services/index.js';
@@ -16,6 +16,8 @@ app.use(express.json({ limit: '1mb' }));
 // ── Routes ──
 app.use('/api/health', healthRouter);
 app.use('/api/jobs', jobsRouter);
+app.use('/api/auth', authRouter);
+app.use('/api/app', appRouter);
 
 // ── HTTP + WS Server ──
 const server = createServer(app);

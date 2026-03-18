@@ -1,10 +1,61 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking, ActivityIndicator } from 'react-native';
 import { useTheme } from '../hooks/useTheme';
 import { spacing, fontSize, borderRadius } from '../theme';
+import { api } from '../services/api';
 
-export default function HomeScreen() {
+interface HomeScreenProps {
+  user: { id: string; username: string } | null;
+  token: string;
+}
+
+export default function HomeScreen({ user, token }: HomeScreenProps) {
   const theme = useTheme();
+  const [loading, setLoading] = useState(false);
+  const [appUrl, setAppUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleLaunchApp = async () => {
+    setLoading(true);
+    setError(null);
+    setAppUrl(null);
+    try {
+      // Start Expo app
+      const { url } = await api.post<{ url: string }>(
+        '/api/app/start',
+        {},
+        { Authorization: `Bearer ${token}` }
+      );
+      // Poll until the app is ready (try GET /api/app/url)
+      let ready = false;
+      let tries = 0;
+      while (!ready && tries < 20) {
+        try {
+          // Try to fetch the app URL (should succeed if Expo is up)
+          const res = await fetch(url, { method: 'HEAD' });
+          if (res.ok) {
+            ready = true;
+            break;
+          }
+        } catch {}
+        await new Promise((r) => setTimeout(r, 1500));
+        tries++;
+      }
+      if (ready) {
+        setAppUrl(url);
+      } else {
+        setError('App did not start in time. Please try again.');
+      }
+    } catch (err) {
+      setError('Failed to launch app: ' + (err instanceof Error ? err.message : 'Unknown error'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOpenApp = () => {
+    if (appUrl) Linking.openURL(appUrl);
+  };
 
   return (
     <ScrollView
@@ -13,20 +64,13 @@ export default function HomeScreen() {
     >
       <View style={styles.header}>
         <Text style={[styles.title, { color: theme.text }]}>CodeIt</Text>
-        <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-          AI-powered app builder
-        </Text>
+        <Text style={[styles.subtitle, { color: theme.textSecondary }]}>AI-powered app builder</Text>
       </View>
-
-      <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
-        <Text style={[styles.cardTitle, { color: theme.text }]}>Welcome</Text>
-        <Text style={[styles.cardBody, { color: theme.textSecondary }]}>
-          Describe what you want to build and let AI generate the code for you. 
-          Open the chat widget to get started.
-        </Text>
+      <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}> 
+        <Text style={[styles.cardTitle, { color: theme.text }]}>Welcome, {user?.username || 'user'}!</Text>
+        <Text style={[styles.cardBody, { color: theme.textSecondary }]}>Describe what you want to build and let AI generate the code for you. Open the chat widget to get started.</Text>
       </View>
-
-      <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
+      <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}> 
         <Text style={[styles.cardTitle, { color: theme.text }]}>How it works</Text>
         <View style={styles.steps}>
           {[
@@ -35,12 +79,29 @@ export default function HomeScreen() {
             '3. Changes are validated & applied safely',
             '4. Code is committed to your repo',
           ].map((step, i) => (
-            <Text key={i} style={[styles.step, { color: theme.textSecondary }]}>
-              {step}
-            </Text>
+            <Text key={i} style={[styles.step, { color: theme.textSecondary }]}>{step}</Text>
           ))}
         </View>
       </View>
+      {error && <Text style={{ color: theme.error, marginBottom: spacing.md }}>{error}</Text>}
+      {loading ? (
+        <View style={{ alignItems: 'center', marginTop: spacing.xl }}>
+          <ActivityIndicator size="large" color={theme.primary} />
+          <Text style={{ color: theme.textSecondary, marginTop: spacing.md }}>Starting your app...</Text>
+        </View>
+      ) : appUrl ? (
+        <View style={{ alignItems: 'center', marginTop: spacing.xl }}>
+          <Text style={{ color: theme.success, marginBottom: spacing.md }}>Your app is ready!</Text>
+          <TouchableOpacity style={[styles.launchBtn, { backgroundColor: theme.primary }]} onPress={handleOpenApp}>
+            <Text style={styles.launchBtnText}>Open My App</Text>
+          </TouchableOpacity>
+          <Text style={{ color: theme.textSecondary, marginTop: spacing.sm }}>{appUrl}</Text>
+        </View>
+      ) : (
+        <TouchableOpacity style={[styles.launchBtn, { backgroundColor: theme.primary }]} onPress={handleLaunchApp}>
+          <Text style={styles.launchBtnText}>Launch My App</Text>
+        </TouchableOpacity>
+      )}
     </ScrollView>
   );
 }
@@ -61,4 +122,11 @@ const styles = StyleSheet.create({
   cardBody: { fontSize: fontSize.md, lineHeight: 24 },
   steps: { gap: spacing.sm },
   step: { fontSize: fontSize.md, lineHeight: 22 },
+  launchBtn: {
+    marginTop: spacing.xl,
+    padding: spacing.lg,
+    borderRadius: borderRadius.lg,
+    alignItems: 'center',
+  },
+  launchBtnText: { color: '#fff', fontWeight: '700', fontSize: fontSize.lg },
 });

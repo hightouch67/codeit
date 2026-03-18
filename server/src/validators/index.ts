@@ -69,12 +69,8 @@ export function validateOperation(op: z.infer<typeof fileOperationSchema>): { va
   const pathCheck = validateFilePath(op.path);
   if (!pathCheck.valid) return pathCheck;
 
-  if (op.type === 'create_file' && !op.content) {
-    return { valid: false, reason: `create_file requires content for ${op.path}` };
-  }
-
-  if (op.type === 'update_file' && !op.diff && !op.content) {
-    return { valid: false, reason: `update_file requires diff or content for ${op.path}` };
+  if ((op.type === 'create_file' || op.type === 'update_file') && !op.content) {
+    return { valid: false, reason: `${op.type} requires content for ${op.path}` };
   }
 
   return { valid: true };

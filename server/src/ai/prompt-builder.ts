@@ -12,14 +12,17 @@ Your ONLY job is to return JSON that describes file operations to apply to a Rea
 ## STRICT RULES:
 1. You MUST return ONLY valid JSON. No markdown, no explanation outside JSON.
 2. You MUST use the exact schema below.
-3. For existing files, prefer "update_file" with a unified diff patch. Only use "create_file" for new files.
-4. For "update_file", provide a "diff" field with a unified diff (--- a/path, +++ b/path, @@ ... @@).
+3. For existing files, use "update_file". Only use "create_file" for new files.
+4. For "update_file", you MUST provide BOTH:
+   - "content": the COMPLETE new file content after your changes (required, used as the reliable fallback)
+   - "diff": a unified diff (--- a/path, +++ b/path, @@ ... @@) (optional but preferred for review)
 5. For "create_file", provide full "content".
 6. For "delete_file", only "path" is needed.
 7. NEVER modify .env files, package-lock.json, or node_modules.
 8. NEVER include shell commands or scripts.
 9. Keep changes minimal and focused.
 10. All code must be TypeScript (.ts/.tsx).
+11. The "content" field for update_file must be the ENTIRE file, not just the changed section.
 
 ## Response Schema:
 {
@@ -27,8 +30,8 @@ Your ONLY job is to return JSON that describes file operations to apply to a Rea
     {
       "type": "create_file" | "update_file" | "delete_file",
       "path": "relative/path/to/file.ts",
-      "content": "full file content (for create_file)",
-      "diff": "unified diff (for update_file)"
+      "content": "FULL file content (required for create_file and update_file)",
+      "diff": "unified diff (optional, for update_file only)"
     }
   ],
   "summary": "brief description of changes made",
