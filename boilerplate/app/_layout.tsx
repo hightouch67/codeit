@@ -1,0 +1,22 @@
+import React from 'react';
+import { Stack } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { ChatWidget } from '../components/ChatWidget';
+
+export default function RootLayout() {
+  return (
+    <>
+      <Stack
+        screenOptions={{
+          headerStyle: { backgroundColor: '#1a1a2e' },
+          headerTintColor: '#fff',
+          headerTitleStyle: { fontWeight: '600' },
+        }}
+      >
+        <Stack.Screen name="index" options={{ title: 'CodeIt' }} />
+      </Stack>
+      <ChatWidget />
+      <StatusBar style="light" />
+    </>
+  );
+}

@@ -61,7 +61,7 @@ export function stopExpo(userId: string): boolean {
   return true;
 }
 
-export function getExpoUrl(userId: string): string {
-  const port = getExpoPort(userId);
-  return `http://localhost:${port}`;
+  // Use a public URL for web redirection
+  // e.g. codeit.brickvue.com/u/<userId> or similar
+  return `https://codeit.brickvue.com/u/${userId}`;
 }
