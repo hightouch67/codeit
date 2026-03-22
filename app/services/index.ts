@@ -1,1 +1,1 @@
-export { api, sendPrompt, getJobStatus } from './api';
+export { api, sendPrompt, getJobStatus, getJobHistory, setAuthToken } from './api';

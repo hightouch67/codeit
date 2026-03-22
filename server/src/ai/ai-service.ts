@@ -33,27 +33,35 @@ async function callAIModel(systemPrompt: string, userPrompt: string): Promise<st
     max_tokens: 8192,
   };
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 120_000); // 2 minute timeout
 
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`AI API error ${res.status}: ${errText}`);
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`AI API error ${res.status}: ${errText}`);
+    }
+
+    const data = await res.json() as {
+      choices: Array<{ message: { content: string } }>;
+    };
+
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) {
+      throw new Error('AI returned empty response');
+    }
+
+    return content;
+  } finally {
+    clearTimeout(timeout);
   }
-
-  const data = await res.json() as {
-    choices: Array<{ message: { content: string } }>;
-  };
-
-  const content = data.choices?.[0]?.message?.content;
-  if (!content) {
-    throw new Error('AI returned empty response');
-  }
-
-  return content;
 }
 
 /**

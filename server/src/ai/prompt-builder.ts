@@ -1,5 +1,8 @@
 import type { FileOperation } from '../types/index.js';
 
+// Rough token estimate: ~4 chars per token for code
+const MAX_CONTEXT_CHARS = 24_000; // ~6k tokens for context, leaving room for the AI response
+
 /**
  * Builds the system prompt for our AI agent.
  * This constrains the AI to return ONLY valid JSON with file operations.
@@ -23,6 +26,8 @@ Your ONLY job is to return JSON that describes file operations to apply to a Rea
 9. Keep changes minimal and focused.
 10. All code must be TypeScript (.ts/.tsx).
 11. The "content" field for update_file must be the ENTIRE file, not just the changed section.
+12. Use functional components, hooks, and TypeScript best practices.
+13. Follow the existing code style and patterns in the project.
 
 ## Response Schema:
 {
@@ -47,12 +52,27 @@ Your ONLY job is to return JSON that describes file operations to apply to a Rea
 - /theme/ – Colors, spacing, typography
 - /utils/ – Utility functions
 - /app/ – Expo Router pages
+- /contexts/ – React contexts (auth, etc.)
+
+## Example (adding a simple Button component):
+{
+  "operations": [
+    {
+      "type": "create_file",
+      "path": "components/PrimaryButton.tsx",
+      "content": "import React from 'react';\\nimport { TouchableOpacity, Text, StyleSheet } from 'react-native';\\nimport { spacing, fontSize, borderRadius } from '../theme';\\n\\ninterface PrimaryButtonProps {\\n  title: string;\\n  onPress: () => void;\\n  disabled?: boolean;\\n}\\n\\nexport function PrimaryButton({ title, onPress, disabled }: PrimaryButtonProps) {\\n  return (\\n    <TouchableOpacity style={[styles.btn, disabled && styles.disabled]} onPress={onPress} disabled={disabled}>\\n      <Text style={styles.text}>{title}</Text>\\n    </TouchableOpacity>\\n  );\\n}\\n\\nconst styles = StyleSheet.create({\\n  btn: { backgroundColor: '#6c5ce7', padding: spacing.md, borderRadius: borderRadius.lg, alignItems: 'center' },\\n  disabled: { opacity: 0.5 },\\n  text: { color: '#fff', fontSize: fontSize.md, fontWeight: '600' },\\n});"
+    }
+  ],
+  "summary": "Added PrimaryButton reusable component",
+  "reasoning": "Created a styled, accessible button component following existing theme patterns"
+}
 
 Respond with ONLY the JSON object. No other text.`;
 }
 
 /**
  * Builds the user prompt including project context.
+ * Respects a token budget to avoid overflow.
  */
 export function buildUserPrompt(
   userRequest: string,
@@ -67,8 +87,16 @@ export function buildUserPrompt(
 
   if (fileContents && Object.keys(fileContents).length > 0) {
     prompt += `## Relevant file contents:\n`;
+    let charsUsed = 0;
+
     for (const [filePath, content] of Object.entries(fileContents)) {
-      prompt += `\n### ${filePath}\n\`\`\`\n${content}\n\`\`\`\n`;
+      const block = `\n### ${filePath}\n\`\`\`\n${content}\n\`\`\`\n`;
+      if (charsUsed + block.length > MAX_CONTEXT_CHARS) {
+        prompt += `\n(${Object.keys(fileContents).length - Object.entries(fileContents).indexOf([filePath, content] as any)} more files omitted for brevity)\n`;
+        break;
+      }
+      prompt += block;
+      charsUsed += block.length;
     }
   }
 

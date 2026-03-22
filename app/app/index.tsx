@@ -1,24 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
+import { ActivityIndicator, View } from 'react-native';
+import { useAuth } from '../contexts';
 import { HomeScreen, AuthScreen } from '../screens';
 
 export default function Index() {
-  const [token, setToken] = useState<string | null>(null);
-  const [user, setUser] = useState<{ id: string; username: string } | null>(null);
+  const { token, user, loading, signIn } = useAuth();
 
-  useEffect(() => {
-    // Try to load token from localStorage (web) or AsyncStorage (native) in a real app
-    // For now, just keep in memory
-  }, []);
+  if (loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1a1a2e' }}>
+        <ActivityIndicator size="large" color="#6c5ce7" />
+      </View>
+    );
+  }
 
   if (!token) {
-    return (
-      <AuthScreen
-        onAuthSuccess={(tok, usr) => {
-          setToken(tok);
-          setUser(usr);
-        }}
-      />
-    );
+    return <AuthScreen onAuthSuccess={signIn} />;
   }
 
   return <HomeScreen user={user} token={token} />;

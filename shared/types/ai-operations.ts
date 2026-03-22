@@ -29,6 +29,7 @@ export interface JobStatus {
   operations?: FileOperation[];
   commitSha?: string;
   error?: string;
+  prompt?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -45,4 +46,14 @@ export interface ChatMessage {
 export interface WSMessage {
   type: 'job_update' | 'chat_message' | 'log' | 'error';
   payload: JobStatus | ChatMessage | string;
+}
+
+export interface AuthUser {
+  id: string;
+  username: string;
+}
+
+export interface AuthResponse {
+  token: string;
+  user: AuthUser;
 }

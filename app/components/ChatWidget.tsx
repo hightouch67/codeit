@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,8 @@ import {
 } from 'react-native';
 import { useTheme } from '../hooks/useTheme';
 import { useWebSocket } from '../hooks/useWebSocket';
-import { sendPrompt } from '../services/api';
+import { useAuth } from '../contexts';
+import { sendPrompt, setAuthToken } from '../services/api';
 import { config, generateId, formatTimestamp } from '../utils';
 import { spacing, fontSize, borderRadius } from '../theme';
 
@@ -26,11 +27,11 @@ interface Message {
 }
 
 const WINDOW_HEIGHT = Dimensions.get('window').height;
-const USER_ID = 'default-user'; // In production, from auth
 const REPO_NAME = 'codeit-app';
 
 export function ChatWidget() {
   const theme = useTheme();
+  const { token, user } = useAuth();
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([
@@ -45,10 +46,17 @@ export function ChatWidget() {
   const slideAnim = useRef(new Animated.Value(WINDOW_HEIGHT)).current;
   const flatListRef = useRef<FlatList>(null);
 
+  // Keep API auth token in sync
+  useEffect(() => {
+    setAuthToken(token);
+  }, [token]);
+
   const handleWSMessage = useCallback((data: unknown) => {
     const msg = data as { type: string; payload: Record<string, unknown> };
     if (msg.type === 'job_update') {
-      const payload = msg.payload as { status: string; message?: string; error?: string; commitSha?: string };
+      const payload = msg.payload as { jobId?: string; status: string; message?: string; error?: string; commitSha?: string };
+
+      // Only show updates for this user's jobs (server scopes in WS)
       const statusText =
         payload.status === 'completed'
           ? `Done! Commit: ${payload.commitSha ?? 'applied'}`
@@ -83,7 +91,9 @@ export function ChatWidget() {
     }
   }, []);
 
-  useWebSocket({ url: config.wsUrl, onMessage: handleWSMessage });
+  // Append token as query param for WS auth
+  const wsUrl = token ? `${config.wsUrl}?token=${encodeURIComponent(token)}` : config.wsUrl;
+  useWebSocket({ url: wsUrl, onMessage: handleWSMessage });
 
   const toggle = () => {
     const toValue = open ? WINDOW_HEIGHT : 0;
@@ -97,7 +107,7 @@ export function ChatWidget() {
 
   const handleSend = async () => {
     const text = input.trim();
-    if (!text || loading) return;
+    if (!text || loading || !user) return;
 
     const userMsg: Message = {
       id: generateId(),
@@ -111,7 +121,7 @@ export function ChatWidget() {
 
     try {
       const { jobId } = await sendPrompt({
-        userId: USER_ID,
+        userId: user.id,
         prompt: text,
         repoName: REPO_NAME,
       });
@@ -177,6 +187,9 @@ export function ChatWidget() {
       </View>
     );
   };
+
+  // Don't render if not logged in
+  if (!token) return null;
 
   return (
     <>

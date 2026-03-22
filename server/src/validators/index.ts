@@ -5,9 +5,9 @@ import { ALLOWED_PATHS, BLOCKED_FILES, ALLOWED_EXTENSIONS } from '../config/inde
 // ── Schema for incoming job requests ──
 
 export const jobRequestSchema = z.object({
-  userId: z.string().min(1).max(100),
+  userId: z.string().min(1).max(100).optional(), // Optional in body — enforced from JWT
   prompt: z.string().min(1).max(5000),
-  repoName: z.string().min(1).max(100).regex(/^[a-zA-Z0-9_-]+$/),
+  repoName: z.string().min(1).max(100).regex(/^[a-zA-Z0-9_-]+$/).optional().default('my-app'),
   branch: z.string().max(100).optional(),
 });
 

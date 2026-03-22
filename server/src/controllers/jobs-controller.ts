@@ -1,8 +1,12 @@
 import { Router, Request, Response } from 'express';
 import { jobQueue } from '../queue/index.js';
 import { jobRequestSchema } from '../validators/index.js';
+import { requireAuth } from '../middleware/auth.js';
 
 const router = Router();
+
+// All job routes require authentication
+router.use(requireAuth);
 
 /**
  * POST /api/jobs — Create a new AI job
@@ -19,7 +23,11 @@ router.post('/', (req: Request, res: Response) => {
       return;
     }
 
-    const job = jobQueue.enqueue(parsed.data);
+    // Enforce userId matches the authenticated user
+    const job = jobQueue.enqueue({
+      ...parsed.data,
+      userId: req.auth!.userId,
+    });
 
     res.status(201).json({
       jobId: job.id,
@@ -33,6 +41,26 @@ router.post('/', (req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/jobs — List jobs for current user
+ */
+router.get('/', (req: Request, res: Response) => {
+  const userId = req.auth!.userId;
+  const jobs = jobQueue.getJobsByUser(userId);
+  res.json(
+    jobs.map((j) => ({
+      jobId: j.id,
+      status: j.status,
+      message: j.message,
+      error: j.error,
+      prompt: j.prompt.substring(0, 100),
+      commitSha: j.commitSha,
+      createdAt: j.createdAt,
+      updatedAt: j.updatedAt,
+    })),
+  );
+});
+
+/**
  * GET /api/jobs/:id — Get job status
  */
 router.get('/:id', (req: Request, res: Response) => {
@@ -40,6 +68,12 @@ router.get('/:id', (req: Request, res: Response) => {
 
   if (!job) {
     res.status(404).json({ error: 'Job not found' });
+    return;
+  }
+
+  // Only allow viewing own jobs
+  if (job.userId !== req.auth!.userId) {
+    res.status(403).json({ error: 'Forbidden' });
     return;
   }
 
