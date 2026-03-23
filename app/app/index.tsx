@@ -1,25 +1,38 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
+import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { useAuth } from '../contexts/AuthContext';
 import { HomeScreen, AuthScreen } from '../screens';
+import { ChatWidget } from '../components/ChatWidget';
 
 export default function Index() {
-  const [token, setToken] = useState<string | null>(null);
-  const [user, setUser] = useState<{ id: string; username: string } | null>(null);
+  const { token, user, loading, login, logout } = useAuth();
 
-  useEffect(() => {
-    // Try to load token from localStorage (web) or AsyncStorage (native) in a real app
-    // For now, just keep in memory
-  }, []);
+  if (loading) {
+    return (
+      <View style={styles.loader}>
+        <ActivityIndicator size="large" color="#6c5ce7" />
+      </View>
+    );
+  }
 
   if (!token) {
     return (
       <AuthScreen
-        onAuthSuccess={(tok, usr) => {
-          setToken(tok);
-          setUser(usr);
+        onAuthSuccess={async (tok, usr) => {
+          await login(tok, usr);
         }}
       />
     );
   }
 
-  return <HomeScreen user={user} token={token} />;
+  return (
+    <>
+      <HomeScreen user={user} token={token} onLogout={logout} />
+      <ChatWidget token={token} userId={user?.id ?? ''} />
+    </>
+  );
 }
+
+const styles = StyleSheet.create({
+  loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+});

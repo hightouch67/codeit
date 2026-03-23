@@ -1,12 +1,9 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { Job, JobStatusType, JobRequest } from '../types/index.js';
+import { insertJob, updateJobStatus } from '../db/index.js';
 
 type JobUpdateCallback = (job: Job) => void;
 
-/**
- * Simple in-memory job queue.
- * Replace with Redis/BullMQ for production scale.
- */
 class JobQueue {
   private jobs = new Map<string, Job>();
   private queue: string[] = [];
@@ -22,7 +19,7 @@ class JobQueue {
     this.onUpdate = fn;
   }
 
-  enqueue(request: JobRequest): Job {
+  async enqueue(request: JobRequest): Promise<Job> {
     const job: Job = {
       id: uuidv4(),
       userId: request.userId,
@@ -37,11 +34,17 @@ class JobQueue {
 
     this.jobs.set(job.id, job);
     this.queue.push(job.id);
+
+    await insertJob({
+      id: job.id,
+      userId: job.userId,
+      prompt: job.prompt,
+      repoName: job.repoName,
+      branch: job.branch,
+    }).catch((err) => console.error('[Queue] DB insert failed:', err));
+
     console.log(`[Queue] Job ${job.id} enqueued. Queue size: ${this.queue.length}`);
-
-    // Start processing if not already
     this.processNext();
-
     return job;
   }
 
@@ -55,6 +58,14 @@ class JobQueue {
 
     Object.assign(job, updates, { updatedAt: Date.now() });
     this.onUpdate?.(job);
+
+    updateJobStatus(id, job.status, {
+      message: job.message,
+      error: job.error,
+      commitSha: job.commitSha,
+      operationsJson: job.operations ? JSON.stringify(job.operations) : undefined,
+    }).catch((err) => console.error('[Queue] DB update failed:', err));
+
     return job;
   }
 
@@ -81,10 +92,8 @@ class JobQueue {
     }
 
     this.processing = false;
-    // Process next job in queue
     this.processNext();
   }
 }
 
-// Singleton
 export const jobQueue = new JobQueue();

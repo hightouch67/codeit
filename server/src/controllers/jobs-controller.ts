@@ -1,15 +1,18 @@
 import { Router, Request, Response } from 'express';
 import { jobQueue } from '../queue/index.js';
 import { jobRequestSchema } from '../validators/index.js';
+import { requireAuth, AuthRequest } from '../middleware/auth.js';
 
 const router = Router();
 
-/**
- * POST /api/jobs — Create a new AI job
- */
-router.post('/', (req: Request, res: Response) => {
+router.post('/', requireAuth, async (req: Request, res: Response) => {
   try {
-    const parsed = jobRequestSchema.safeParse(req.body);
+    const { auth } = req as AuthRequest;
+
+    const parsed = jobRequestSchema.safeParse({
+      ...req.body,
+      userId: auth.userId,
+    });
 
     if (!parsed.success) {
       res.status(400).json({
@@ -19,7 +22,7 @@ router.post('/', (req: Request, res: Response) => {
       return;
     }
 
-    const job = jobQueue.enqueue(parsed.data);
+    const job = await jobQueue.enqueue(parsed.data);
 
     res.status(201).json({
       jobId: job.id,
@@ -32,14 +35,17 @@ router.post('/', (req: Request, res: Response) => {
   }
 });
 
-/**
- * GET /api/jobs/:id — Get job status
- */
-router.get('/:id', (req: Request, res: Response) => {
+router.get('/:id', requireAuth, (req: Request, res: Response) => {
   const job = jobQueue.getJob(req.params.id);
 
   if (!job) {
     res.status(404).json({ error: 'Job not found' });
+    return;
+  }
+
+  const { auth } = req as AuthRequest;
+  if (job.userId !== auth.userId) {
+    res.status(403).json({ error: 'Forbidden' });
     return;
   }
 

@@ -1,11 +1,11 @@
 import React from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { ChatWidget } from '../components/ChatWidget';
+import { AuthProvider } from '../contexts/AuthContext';
 
 export default function RootLayout() {
   return (
-    <>
+    <AuthProvider>
       <Stack
         screenOptions={{
           headerStyle: { backgroundColor: '#1a1a2e' },
@@ -15,8 +15,7 @@ export default function RootLayout() {
       >
         <Stack.Screen name="index" options={{ title: 'CodeIt' }} />
       </Stack>
-      <ChatWidget />
       <StatusBar style="light" />
-    </>
+    </AuthProvider>
   );
 }

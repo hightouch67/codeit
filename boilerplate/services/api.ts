@@ -20,7 +20,9 @@ async function request<T>(path: string, options: ApiOptions = {}): Promise<T> {
 
   if (!res.ok) {
     const errBody = await res.text();
-    throw new Error(`API ${res.status}: ${errBody}`);
+    let msg = `API ${res.status}`;
+    try { msg = JSON.parse(errBody).error ?? msg; } catch { msg = errBody || msg; }
+    throw new Error(msg);
   }
 
   return res.json();
@@ -33,7 +35,6 @@ export const api = {
 };
 
 export interface SendPromptPayload {
-  userId: string;
   prompt: string;
   repoName: string;
 }
@@ -42,10 +43,6 @@ export interface SendPromptResponse {
   jobId: string;
 }
 
-export function sendPrompt(payload: SendPromptPayload): Promise<SendPromptResponse> {
-  return api.post('/api/jobs', payload);
-}
-
-export function getJobStatus(jobId: string) {
-  return api.get(`/api/jobs/${encodeURIComponent(jobId)}`);
+export function sendPrompt(payload: SendPromptPayload, token: string): Promise<SendPromptResponse> {
+  return api.post('/api/jobs', payload, { Authorization: `Bearer ${token}` });
 }

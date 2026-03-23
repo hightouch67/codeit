@@ -3,58 +3,81 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import { env } from '../config/index.js';
 
-/**
- * Get the local path for a user's repo.
- */
 export function getRepoPath(userId: string, repoName: string): string {
-  // Sanitize to prevent path traversal
   const safeUserId = userId.replace(/[^a-zA-Z0-9_-]/g, '');
   const safeRepoName = repoName.replace(/[^a-zA-Z0-9_-]/g, '');
   return path.join(env.GIT_REPOS_DIR, safeUserId, safeRepoName);
 }
 
-/**
- * Initialize or clone a repo for a user.
- * If the repo doesn't exist locally, copies from boilerplate.
- */
 export async function ensureRepo(userId: string, repoName: string): Promise<string> {
   const repoPath = getRepoPath(userId, repoName);
-
   const exists = await fs.access(repoPath).then(() => true).catch(() => false);
 
   if (!exists) {
     console.log(`[Git] Initializing new repo at ${repoPath}`);
     await fs.mkdir(repoPath, { recursive: true });
 
-    // Copy boilerplate
     const boilerplatePath = path.resolve(env.BOILERPLATE_DIR);
     await copyDir(boilerplatePath, repoPath);
 
-    // Initialize git
     const git = simpleGit(repoPath);
     await git.init();
     await git.add('.');
     await git.commit('Initial commit from CodeIt boilerplate');
 
-    // If GitHub token is configured, set up remote
     if (env.GITHUB_TOKEN && env.GITHUB_ORG) {
-      const remoteUrl = `https://${env.GITHUB_TOKEN}@github.com/${env.GITHUB_ORG}/${safeRepoId(userId, repoName)}.git`;
-      await git.addRemote('origin', remoteUrl).catch(() => {
-        // Remote might already exist
-      });
+      const repoId = safeRepoId(userId, repoName);
+      await ensureGitHubRepo(repoId);
+      const remoteUrl = `https://${env.GITHUB_TOKEN}@github.com/${env.GITHUB_ORG}/${repoId}.git`;
+      await git.addRemote('origin', remoteUrl).catch(() => {});
+
+      try {
+        await git.push('origin', 'master', ['--set-upstream']);
+        console.log(`[Git] Pushed initial commit to GitHub: ${env.GITHUB_ORG}/${repoId}`);
+      } catch (err) {
+        console.error('[Git] Initial push failed (non-fatal):', err);
+      }
     }
   }
 
   return repoPath;
 }
 
+async function ensureGitHubRepo(repoName: string): Promise<void> {
+  if (!env.GITHUB_TOKEN || !env.GITHUB_ORG) return;
+
+  try {
+    const res = await fetch(`https://api.github.com/orgs/${env.GITHUB_ORG}/repos`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${env.GITHUB_TOKEN}`,
+        'Accept': 'application/vnd.github+json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: repoName,
+        private: true,
+        auto_init: false,
+      }),
+    });
+
+    if (res.status === 201) {
+      console.log(`[Git] Created GitHub repo: ${env.GITHUB_ORG}/${repoName}`);
+    } else if (res.status === 422) {
+      console.log(`[Git] GitHub repo already exists: ${env.GITHUB_ORG}/${repoName}`);
+    } else {
+      const body = await res.text();
+      console.error(`[Git] GitHub API error (${res.status}): ${body}`);
+    }
+  } catch (err) {
+    console.error('[Git] Failed to create GitHub repo:', err);
+  }
+}
+
 function safeRepoId(userId: string, repoName: string): string {
   return `${userId.replace(/[^a-zA-Z0-9_-]/g, '')}-${repoName.replace(/[^a-zA-Z0-9_-]/g, '')}`;
 }
 
-/**
- * Create a branch for this job.
- */
 export async function createBranch(repoPath: string, branchName: string): Promise<void> {
   const git = simpleGit(repoPath);
   const branches = await git.branchLocal();
@@ -67,9 +90,6 @@ export async function createBranch(repoPath: string, branchName: string): Promis
   console.log(`[Git] On branch: ${branchName}`);
 }
 
-/**
- * Stage, commit, and optionally push changes.
- */
 export async function commitAndPush(
   repoPath: string,
   message: string,
@@ -95,9 +115,6 @@ export async function commitAndPush(
   return sha;
 }
 
-/**
- * List all tracked files in the repo (relative paths).
- */
 export async function listFiles(repoPath: string): Promise<string[]> {
   const files: string[] = [];
   await walkDir(repoPath, repoPath, files);
@@ -106,20 +123,14 @@ export async function listFiles(repoPath: string): Promise<string[]> {
   );
 }
 
-/**
- * Read a file from the repo.
- */
 export async function readRepoFile(repoPath: string, filePath: string): Promise<string> {
   const fullPath = path.join(repoPath, filePath);
-  // Security: ensure we don't escape the repo directory
   const resolved = path.resolve(fullPath);
   if (!resolved.startsWith(path.resolve(repoPath))) {
     throw new Error('Path traversal attempt blocked');
   }
   return fs.readFile(fullPath, 'utf-8');
 }
-
-// ── Helpers ──
 
 async function copyDir(src: string, dest: string): Promise<void> {
   await fs.mkdir(dest, { recursive: true });

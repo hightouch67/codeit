@@ -15,7 +15,7 @@ export const env = {
   GIT_REPOS_DIR: process.env.GIT_REPOS_DIR ?? '/tmp/codeit-repos',
 
   // Boilerplate path
-  BOILERPLATE_DIR: process.env.BOILERPLATE_DIR ?? '../app',
+  BOILERPLATE_DIR: process.env.BOILERPLATE_DIR ?? '../boilerplate',
 
   // Docker
   DOCKER_ENABLED: process.env.DOCKER_ENABLED === 'true',
@@ -25,4 +25,17 @@ export const env = {
 
   // Job
   MAX_RETRIES: parseInt(process.env.MAX_RETRIES ?? '2', 10),
+
+  // MySQL Database
+  DB_HOST: process.env.DB_HOST ?? 'localhost',
+  DB_PORT: parseInt(process.env.DB_PORT ?? '3306', 10),
+  DB_USER: process.env.DB_USER ?? 'codeit',
+  DB_PASSWORD: process.env.DB_PASSWORD ?? '',
+  DB_NAME: process.env.DB_NAME ?? 'codeit',
+
+  // Authentication
+  JWT_SECRET: process.env.JWT_SECRET ?? 'changeme',
+
+  // App domain for per-user subdomain URLs
+  CODEIT_DOMAIN: process.env.CODEIT_DOMAIN ?? 'codeit.example.com',
 } as const;

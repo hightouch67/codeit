@@ -25,11 +25,15 @@ interface Message {
   status?: string;
 }
 
+interface ChatWidgetProps {
+  token: string;
+  userId: string;
+}
+
 const WINDOW_HEIGHT = Dimensions.get('window').height;
-const USER_ID = 'default-user'; // In production, from auth
 const REPO_NAME = 'codeit-app';
 
-export function ChatWidget() {
+export function ChatWidget({ token, userId }: ChatWidgetProps) {
   const theme = useTheme();
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
@@ -83,7 +87,8 @@ export function ChatWidget() {
     }
   }, []);
 
-  useWebSocket({ url: config.wsUrl, onMessage: handleWSMessage });
+  const wsUrl = token ? `${config.wsUrl}?token=${encodeURIComponent(token)}` : config.wsUrl;
+  useWebSocket({ url: wsUrl, onMessage: handleWSMessage });
 
   const toggle = () => {
     const toValue = open ? WINDOW_HEIGHT : 0;
@@ -110,11 +115,10 @@ export function ChatWidget() {
     setLoading(true);
 
     try {
-      const { jobId } = await sendPrompt({
-        userId: USER_ID,
-        prompt: text,
-        repoName: REPO_NAME,
-      });
+      const { jobId } = await sendPrompt(
+        { prompt: text, repoName: REPO_NAME },
+        token,
+      );
       setMessages((prev) => [
         ...prev,
         {
@@ -180,7 +184,6 @@ export function ChatWidget() {
 
   return (
     <>
-      {/* Floating Action Button */}
       <TouchableOpacity
         style={[styles.fab, { backgroundColor: theme.primary }]}
         onPress={toggle}
@@ -189,7 +192,6 @@ export function ChatWidget() {
         <Text style={styles.fabText}>{open ? '✕' : '💬'}</Text>
       </TouchableOpacity>
 
-      {/* Chat Panel */}
       <Animated.View
         style={[
           styles.panel,
@@ -204,7 +206,6 @@ export function ChatWidget() {
           style={styles.panelInner}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
-          {/* Header */}
           <View style={[styles.panelHeader, { borderBottomColor: theme.border }]}>
             <Text style={[styles.panelTitle, { color: theme.text }]}>AI Chat</Text>
             {loading && (
@@ -212,7 +213,6 @@ export function ChatWidget() {
             )}
           </View>
 
-          {/* Messages */}
           <FlatList
             ref={flatListRef}
             data={messages}
@@ -222,7 +222,6 @@ export function ChatWidget() {
             onContentSizeChange={() => flatListRef.current?.scrollToEnd()}
           />
 
-          {/* Input */}
           <View style={[styles.inputRow, { borderTopColor: theme.border }]}>
             <TextInput
               style={[

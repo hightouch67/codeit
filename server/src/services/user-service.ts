@@ -1,25 +1,28 @@
-import { v4 as uuidv4 } from 'uuid';
+import {
+  createUser as dbCreateUser,
+  getUserByUsername as dbGetUserByUsername,
+  getUserById as dbGetUserById,
+  verifyUser as dbVerifyUser,
+} from '../db/index.js';
+import type { DbUser } from '../db/index.js';
 
-export interface User {
-  id: string;
-  username: string;
-  password: string; // In production, hash this!
+export type { DbUser as User } from '../db/index.js';
+
+export async function createUser(username: string, password: string) {
+  const user = await dbCreateUser(username, password);
+  return { id: user.id, username: user.username };
 }
 
-const users: User[] = [];
-
-export function createUser(username: string, password: string): User {
-  const user: User = { id: uuidv4(), username, password };
-  users.push(user);
-  return user;
+export async function getUserByUsername(username: string) {
+  return dbGetUserByUsername(username);
 }
 
-export function verifyUser(username: string, password: string): User | null {
-  return users.find((u) => u.username === username && u.password === password) || null;
+export async function getUserById(id: string) {
+  return dbGetUserById(id);
 }
 
-export function getUserByUsername(username: string): User | undefined {
-  return users.find((u) => u.username === username);
+export async function verifyUser(username: string, password: string) {
+  const user = await dbVerifyUser(username, password);
+  if (!user) return null;
+  return { id: user.id, username: user.username };
 }
-
-export { users };

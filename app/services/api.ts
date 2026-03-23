@@ -20,20 +20,26 @@ async function request<T>(path: string, options: ApiOptions = {}): Promise<T> {
 
   if (!res.ok) {
     const errBody = await res.text();
-    throw new Error(`API ${res.status}: ${errBody}`);
+    let msg = `API ${res.status}`;
+    try { msg = JSON.parse(errBody).error ?? msg; } catch { msg = errBody || msg; }
+    throw new Error(msg);
   }
 
   return res.json();
+}
+
+function authHeader(token: string): Record<string, string> {
+  return { Authorization: `Bearer ${token}` };
 }
 
 export const api = {
   get: <T>(path: string, headers?: Record<string, string>) => request<T>(path, { headers }),
   post: <T>(path: string, body?: unknown, headers?: Record<string, string>) => request<T>(path, { method: 'POST', body, headers }),
   baseUrl: config.apiUrl,
+  authHeader,
 };
 
 export interface SendPromptPayload {
-  userId: string;
   prompt: string;
   repoName: string;
 }
@@ -42,10 +48,10 @@ export interface SendPromptResponse {
   jobId: string;
 }
 
-export function sendPrompt(payload: SendPromptPayload): Promise<SendPromptResponse> {
-  return api.post('/api/jobs', payload);
+export function sendPrompt(payload: SendPromptPayload, token: string): Promise<SendPromptResponse> {
+  return api.post('/api/jobs', payload, authHeader(token));
 }
 
-export function getJobStatus(jobId: string) {
-  return api.get(`/api/jobs/${encodeURIComponent(jobId)}`);
+export function getJobStatus(jobId: string, token: string) {
+  return api.get(`/api/jobs/${encodeURIComponent(jobId)}`, authHeader(token));
 }

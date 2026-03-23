@@ -7,15 +7,17 @@ interface UseWebSocketOptions {
   onMessage?: (data: unknown) => void;
   reconnectInterval?: number;
   maxRetries?: number;
+  enabled?: boolean;
 }
 
-export function useWebSocket({ url, onMessage, reconnectInterval = 3000, maxRetries = 5 }: UseWebSocketOptions) {
+export function useWebSocket({ url, onMessage, reconnectInterval = 3000, maxRetries = 5, enabled = true }: UseWebSocketOptions) {
   const [status, setStatus] = useState<WSStatus>('disconnected');
   const wsRef = useRef<WebSocket | null>(null);
   const retriesRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout>>(null);
 
   const connect = useCallback(() => {
+    if (!enabled || !url) return;
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
     setStatus('connecting');
@@ -35,27 +37,23 @@ export function useWebSocket({ url, onMessage, reconnectInterval = 3000, maxRetr
       }
     };
 
-    ws.onerror = () => {
-      setStatus('error');
-    };
+    ws.onerror = () => setStatus('error');
 
     ws.onclose = () => {
       setStatus('disconnected');
       wsRef.current = null;
-      if (retriesRef.current < maxRetries) {
+      if (enabled && retriesRef.current < maxRetries) {
         retriesRef.current++;
         reconnectTimerRef.current = setTimeout(connect, reconnectInterval);
       }
     };
 
     wsRef.current = ws;
-  }, [url, onMessage, reconnectInterval, maxRetries]);
+  }, [url, onMessage, reconnectInterval, maxRetries, enabled]);
 
   const disconnect = useCallback(() => {
-    if (reconnectTimerRef.current) {
-      clearTimeout(reconnectTimerRef.current);
-    }
-    retriesRef.current = maxRetries; // prevent reconnect
+    if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+    retriesRef.current = maxRetries;
     wsRef.current?.close();
     wsRef.current = null;
     setStatus('disconnected');
@@ -68,11 +66,10 @@ export function useWebSocket({ url, onMessage, reconnectInterval = 3000, maxRetr
   }, []);
 
   useEffect(() => {
-    connect();
-    return () => {
-      disconnect();
-    };
-  }, [connect, disconnect]);
+    if (enabled) connect();
+    else disconnect();
+    return () => { disconnect(); };
+  }, [enabled, connect, disconnect]);
 
   return { status, send, disconnect, reconnect: connect };
 }

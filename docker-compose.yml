@@ -20,27 +20,37 @@ services:
       - BOILERPLATE_DIR=/app/boilerplate
       - DOCKER_ENABLED=false
       - MAX_RETRIES=2
+      - DB_HOST=${DB_HOST:-localhost}
+      - DB_PORT=${DB_PORT:-3306}
+      - DB_USER=${DB_USER:-codeit}
+      - DB_PASSWORD=${DB_PASSWORD:-}
+      - DB_NAME=${DB_NAME:-codeit}
+      - JWT_SECRET=${JWT_SECRET:-changeme}
+      - CODEIT_DOMAIN=${CODEIT_DOMAIN:-codeit.example.com}
     volumes:
       - codeit-repos:/data/repos
-      - ./app:/app/boilerplate:ro
+      - ./boilerplate:/app/boilerplate:ro
     restart: unless-stopped
     networks:
       - codeit-network
 
-  redis:
-    image: redis:7-alpine
-    container_name: codeit-redis
+  proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: codeit-proxy
     ports:
-      - "6379:6379"
-    volumes:
-      - redis-data:/data
+      - "8081:8081"
+    environment:
+      - PROXY_PORT=8081
+      - CODEIT_DOMAIN=${CODEIT_DOMAIN:-codeit.brickvue.com}
+    command: node /app/infra/user-proxy.js
     restart: unless-stopped
     networks:
       - codeit-network
 
 volumes:
   codeit-repos:
-  redis-data:
 
 networks:
   codeit-network:

@@ -7,9 +7,10 @@ import { api } from '../services/api';
 interface HomeScreenProps {
   user: { id: string; username: string } | null;
   token: string;
+  onLogout?: () => void;
 }
 
-export default function HomeScreen({ user, token }: HomeScreenProps) {
+export default function HomeScreen({ user, token, onLogout }: HomeScreenProps) {
   const theme = useTheme();
   const [loading, setLoading] = useState(false);
   const [appUrl, setAppUrl] = useState<string | null>(null);
@@ -20,18 +21,15 @@ export default function HomeScreen({ user, token }: HomeScreenProps) {
     setError(null);
     setAppUrl(null);
     try {
-      // Start Expo app
       const { url } = await api.post<{ url: string }>(
         '/api/app/start',
         {},
         { Authorization: `Bearer ${token}` }
       );
-      // Poll until the app is ready (try GET /api/app/url)
       let ready = false;
       let tries = 0;
       while (!ready && tries < 20) {
         try {
-          // Try to fetch the app URL (should succeed if Expo is up)
           const res = await fetch(url, { method: 'HEAD' });
           if (res.ok) {
             ready = true;
@@ -54,7 +52,11 @@ export default function HomeScreen({ user, token }: HomeScreenProps) {
   };
 
   const handleOpenApp = () => {
-    if (appUrl) Linking.openURL(appUrl);
+    if (appUrl) {
+      // Append token so the embedded ChatWidget in the user's app can authenticate
+      const urlWithToken = `${appUrl}?token=${encodeURIComponent(token)}`;
+      Linking.openURL(urlWithToken);
+    }
   };
 
   return (
@@ -66,11 +68,22 @@ export default function HomeScreen({ user, token }: HomeScreenProps) {
         <Text style={[styles.title, { color: theme.text }]}>CodeIt</Text>
         <Text style={[styles.subtitle, { color: theme.textSecondary }]}>AI-powered app builder</Text>
       </View>
-      <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}> 
-        <Text style={[styles.cardTitle, { color: theme.text }]}>Welcome, {user?.username || 'user'}!</Text>
-        <Text style={[styles.cardBody, { color: theme.textSecondary }]}>Describe what you want to build and let AI generate the code for you. Open the chat widget to get started.</Text>
+
+      <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
+        <View style={styles.cardHeader}>
+          <Text style={[styles.cardTitle, { color: theme.text }]}>Welcome, {user?.username || 'user'}!</Text>
+          {onLogout && (
+            <TouchableOpacity onPress={onLogout}>
+              <Text style={[styles.logoutText, { color: theme.error }]}>Logout</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        <Text style={[styles.cardBody, { color: theme.textSecondary }]}>
+          Describe what you want to build and let AI generate the code for you. Open the chat widget to get started.
+        </Text>
       </View>
-      <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}> 
+
+      <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
         <Text style={[styles.cardTitle, { color: theme.text }]}>How it works</Text>
         <View style={styles.steps}>
           {[
@@ -83,6 +96,7 @@ export default function HomeScreen({ user, token }: HomeScreenProps) {
           ))}
         </View>
       </View>
+
       {error && <Text style={{ color: theme.error, marginBottom: spacing.md }}>{error}</Text>}
       {loading ? (
         <View style={{ alignItems: 'center', marginTop: spacing.xl }}>
@@ -118,8 +132,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginBottom: spacing.md,
   },
-  cardTitle: { fontSize: fontSize.lg, fontWeight: '600', marginBottom: spacing.sm },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  cardTitle: { fontSize: fontSize.lg, fontWeight: '600' },
   cardBody: { fontSize: fontSize.md, lineHeight: 24 },
+  logoutText: { fontSize: fontSize.sm, fontWeight: '600' },
   steps: { gap: spacing.sm },
   step: { fontSize: fontSize.md, lineHeight: 22 },
   launchBtn: {

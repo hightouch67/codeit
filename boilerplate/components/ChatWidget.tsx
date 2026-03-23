@@ -25,11 +25,14 @@ interface Message {
   status?: string;
 }
 
+interface ChatWidgetProps {
+  token: string;
+}
+
 const WINDOW_HEIGHT = Dimensions.get('window').height;
-const USER_ID = 'default-user'; // In production, from auth
 const REPO_NAME = 'codeit-app';
 
-export function ChatWidget() {
+export function ChatWidget({ token }: ChatWidgetProps) {
   const theme = useTheme();
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
@@ -51,7 +54,7 @@ export function ChatWidget() {
       const payload = msg.payload as { status: string; message?: string; error?: string; commitSha?: string };
       const statusText =
         payload.status === 'completed'
-          ? `Done! Commit: ${payload.commitSha ?? 'applied'}`
+          ? `Done! Changes applied. Commit: ${payload.commitSha ?? 'ok'}`
           : payload.status === 'failed'
           ? `Error: ${payload.error ?? 'unknown'}`
           : `Status: ${payload.status}${payload.message ? ` — ${payload.message}` : ''}`;
@@ -83,46 +86,28 @@ export function ChatWidget() {
     }
   }, []);
 
-  useWebSocket({ url: config.wsUrl, onMessage: handleWSMessage });
+  const wsUrl = token ? `${config.wsUrl}?token=${encodeURIComponent(token)}` : null;
+  useWebSocket({ url: wsUrl ?? '', onMessage: handleWSMessage, enabled: !!token });
 
   const toggle = () => {
     const toValue = open ? WINDOW_HEIGHT : 0;
-    Animated.spring(slideAnim, {
-      toValue,
-      useNativeDriver: true,
-      friction: 8,
-    }).start();
+    Animated.spring(slideAnim, { toValue, useNativeDriver: true, friction: 8 }).start();
     setOpen(!open);
   };
 
   const handleSend = async () => {
     const text = input.trim();
-    if (!text || loading) return;
+    if (!text || loading || !token) return;
 
-    const userMsg: Message = {
-      id: generateId(),
-      role: 'user',
-      content: text,
-      timestamp: Date.now(),
-    };
-    setMessages((prev) => [...prev, userMsg]);
+    setMessages((prev) => [...prev, { id: generateId(), role: 'user', content: text, timestamp: Date.now() }]);
     setInput('');
     setLoading(true);
 
     try {
-      const { jobId } = await sendPrompt({
-        userId: USER_ID,
-        prompt: text,
-        repoName: REPO_NAME,
-      });
+      const { jobId } = await sendPrompt({ prompt: text, repoName: REPO_NAME }, token);
       setMessages((prev) => [
         ...prev,
-        {
-          id: generateId(),
-          role: 'system',
-          content: `Job queued: ${jobId}`,
-          timestamp: Date.now(),
-        },
+        { id: generateId(), role: 'system', content: `Job queued: ${jobId}`, timestamp: Date.now() },
       ]);
     } catch (err) {
       setLoading(false);
@@ -131,7 +116,7 @@ export function ChatWidget() {
         {
           id: generateId(),
           role: 'assistant',
-          content: `Failed to send: ${err instanceof Error ? err.message : 'Unknown error'}`,
+          content: `Failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
           timestamp: Date.now(),
           status: 'failed',
         },
@@ -142,32 +127,19 @@ export function ChatWidget() {
   const renderMessage = ({ item }: { item: Message }) => {
     const isUser = item.role === 'user';
     const isSystem = item.role === 'system';
-
     return (
       <View style={[styles.msgRow, isUser && styles.msgRowUser]}>
         <View
           style={[
             styles.bubble,
             {
-              backgroundColor: isUser
-                ? theme.chatBubbleUser
-                : isSystem
-                ? 'transparent'
-                : theme.chatBubbleAssistant,
+              backgroundColor: isUser ? theme.chatBubbleUser : isSystem ? 'transparent' : theme.chatBubbleAssistant,
               borderColor: isSystem ? theme.border : 'transparent',
               borderWidth: isSystem ? 1 : 0,
             },
           ]}
         >
-          <Text
-            style={[
-              styles.msgText,
-              {
-                color: isUser ? theme.chatTextUser : theme.chatTextAssistant,
-                fontStyle: isSystem ? 'italic' : 'normal',
-              },
-            ]}
-          >
+          <Text style={[styles.msgText, { color: isUser ? theme.chatTextUser : theme.chatTextAssistant, fontStyle: isSystem ? 'italic' : 'normal' }]}>
             {item.content}
           </Text>
           <Text style={[styles.msgTime, { color: isUser ? 'rgba(255,255,255,0.6)' : theme.textSecondary }]}>
@@ -178,41 +150,24 @@ export function ChatWidget() {
     );
   };
 
+  if (!token) return null;
+
   return (
     <>
-      {/* Floating Action Button */}
-      <TouchableOpacity
-        style={[styles.fab, { backgroundColor: theme.primary }]}
-        onPress={toggle}
-        activeOpacity={0.8}
-      >
+      <TouchableOpacity style={[styles.fab, { backgroundColor: theme.primary }]} onPress={toggle} activeOpacity={0.8}>
         <Text style={styles.fabText}>{open ? '✕' : '💬'}</Text>
       </TouchableOpacity>
 
-      {/* Chat Panel */}
       <Animated.View
-        style={[
-          styles.panel,
-          {
-            backgroundColor: theme.background,
-            transform: [{ translateY: slideAnim }],
-          },
-        ]}
+        style={[styles.panel, { backgroundColor: theme.background, transform: [{ translateY: slideAnim }] }]}
         pointerEvents={open ? 'auto' : 'none'}
       >
-        <KeyboardAvoidingView
-          style={styles.panelInner}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-          {/* Header */}
+        <KeyboardAvoidingView style={styles.panelInner} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <View style={[styles.panelHeader, { borderBottomColor: theme.border }]}>
-            <Text style={[styles.panelTitle, { color: theme.text }]}>AI Chat</Text>
-            {loading && (
-              <View style={[styles.statusDot, { backgroundColor: theme.warning }]} />
-            )}
+            <Text style={[styles.panelTitle, { color: theme.text }]}>AI Builder</Text>
+            {loading && <View style={[styles.statusDot, { backgroundColor: theme.warning }]} />}
           </View>
 
-          {/* Messages */}
           <FlatList
             ref={flatListRef}
             data={messages}
@@ -222,20 +177,12 @@ export function ChatWidget() {
             onContentSizeChange={() => flatListRef.current?.scrollToEnd()}
           />
 
-          {/* Input */}
           <View style={[styles.inputRow, { borderTopColor: theme.border }]}>
             <TextInput
-              style={[
-                styles.input,
-                {
-                  backgroundColor: theme.surface,
-                  color: theme.text,
-                  borderColor: theme.border,
-                },
-              ]}
+              style={[styles.input, { backgroundColor: theme.surface, color: theme.text, borderColor: theme.border }]}
               value={input}
               onChangeText={setInput}
-              placeholder="Describe a change..."
+              placeholder="Describe a change to your app..."
               placeholderTextColor={theme.textSecondary}
               multiline
               maxLength={2000}
@@ -257,76 +204,21 @@ export function ChatWidget() {
 }
 
 const styles = StyleSheet.create({
-  fab: {
-    position: 'absolute',
-    bottom: 30,
-    right: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    zIndex: 100,
-  },
+  fab: { position: 'absolute', bottom: 30, right: 20, width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', elevation: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 4, zIndex: 100 },
   fabText: { fontSize: 22 },
-  panel: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 99,
-  },
+  panel: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 99 },
   panelInner: { flex: 1 },
-  panelHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: spacing.md,
-    borderBottomWidth: 1,
-    paddingTop: 50,
-  },
+  panelHeader: { flexDirection: 'row', alignItems: 'center', padding: spacing.md, borderBottomWidth: 1, paddingTop: 50 },
   panelTitle: { fontSize: fontSize.lg, fontWeight: '700', flex: 1 },
-  statusDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
+  statusDot: { width: 10, height: 10, borderRadius: 5 },
   msgList: { padding: spacing.md, paddingBottom: spacing.xl },
   msgRow: { marginBottom: spacing.sm, alignItems: 'flex-start' },
   msgRowUser: { alignItems: 'flex-end' },
-  bubble: {
-    maxWidth: '80%',
-    padding: spacing.md,
-    borderRadius: borderRadius.lg,
-  },
+  bubble: { maxWidth: '80%', padding: spacing.md, borderRadius: borderRadius.lg },
   msgText: { fontSize: fontSize.sm, lineHeight: 20 },
   msgTime: { fontSize: fontSize.xs, marginTop: spacing.xs, alignSelf: 'flex-end' },
-  inputRow: {
-    flexDirection: 'row',
-    padding: spacing.sm,
-    borderTopWidth: 1,
-    alignItems: 'flex-end',
-  },
-  input: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: borderRadius.lg,
-    padding: spacing.sm,
-    maxHeight: 100,
-    fontSize: fontSize.sm,
-  },
-  sendBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: spacing.sm,
-  },
+  inputRow: { flexDirection: 'row', padding: spacing.sm, borderTopWidth: 1, alignItems: 'flex-end' },
+  input: { flex: 1, borderWidth: 1, borderRadius: borderRadius.lg, padding: spacing.sm, maxHeight: 100, fontSize: fontSize.sm },
+  sendBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', marginLeft: spacing.sm },
   sendBtnText: { color: '#fff', fontSize: 20, fontWeight: '700' },
 });
