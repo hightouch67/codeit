@@ -4,7 +4,6 @@ import {
   getUserById as dbGetUserById,
   verifyUser as dbVerifyUser,
 } from '../db/index.js';
-import type { DbUser } from '../db/index.js';
 
 export type { DbUser as User } from '../db/index.js';
 

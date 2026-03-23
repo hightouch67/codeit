@@ -2,6 +2,9 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+const TOKEN_KEY = 'codeit_token';
+const USER_KEY = 'codeit_user';
+
 interface User {
   id: string;
   username: string;
@@ -22,9 +25,6 @@ const AuthContext = createContext<AuthContextType>({
   login: async () => {},
   logout: async () => {},
 });
-
-const TOKEN_KEY = 'codeit_token';
-const USER_KEY = 'codeit_user';
 
 async function saveToStorage(key: string, value: string) {
   if (Platform.OS === 'web') {

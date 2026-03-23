@@ -1,21 +1,23 @@
 import { spawn, ChildProcess, execSync } from 'child_process';
 import path from 'path';
 import fs from 'fs';
-import { ensureRepo } from '../git/git-service.js';
+import os from 'os';
 import { env } from '../config/index.js';
+import { ensureRepo } from '../git/git-service.js';
 import { getAppByUserAndRepo, createApp, updateAppPort, clearAppPid } from '../db/index.js';
 import { getSubdomainUrl, getUserSubdomain } from './cloudflare-service.js';
 import { getUserById } from '../db/index.js';
+
+const isWindows = os.platform() === 'win32';
 
 interface ExpoProcess {
   userId: string;
   port: number;
   pid: number;
-  proc: ChildProcess;
+  proc: ChildProcess | null;
   startedAt: number;
 }
 
-// In-memory map for processes started in THIS server session
 const running: Record<string, ExpoProcess> = {};
 
 function getExpoPort(userId: string): number {
@@ -26,18 +28,27 @@ function getExpoPort(userId: string): number {
   return 9000 + (hash % 10000);
 }
 
-/** Check if a process with a given PID is still alive */
 function isPidAlive(pid: number): boolean {
   try {
-    process.kill(pid, 0); // signal 0 = check only
+    process.kill(pid, 0);
     return true;
   } catch {
     return false;
   }
 }
 
+function resolveExpoCli(appDir: string): { command: string; args: string[] } {
+  for (const name of ['cli.js', 'cli']) {
+    const local = path.join(appDir, 'node_modules', 'expo', 'bin', name);
+    if (fs.existsSync(local)) {
+      return { command: process.execPath, args: [local] };
+    }
+  }
+  const npxBin = isWindows ? 'npx.cmd' : 'npx';
+  return { command: npxBin, args: ['expo'] };
+}
+
 export async function startExpo(userId: string, repoRoot: string): Promise<{ port: number; alreadyRunning: boolean }> {
-  // Already tracked in this session
   if (running[userId]) {
     return { port: running[userId].port, alreadyRunning: true };
   }
@@ -46,32 +57,42 @@ export async function startExpo(userId: string, repoRoot: string): Promise<{ por
   const existing = await getAppByUserAndRepo(userId, 'codeit-app');
   if (existing?.expo_pid && existing.expo_port && isPidAlive(existing.expo_pid)) {
     console.log(`[ExpoProcess] Reattaching to existing process PID ${existing.expo_pid} port ${existing.expo_port} for user ${userId}`);
-    // Re-register in memory (no proc handle needed — we just know it's alive)
-    running[userId] = { userId, port: existing.expo_port, pid: existing.expo_pid, proc: null as any, startedAt: Date.now() };
+    running[userId] = { userId, port: existing.expo_port, pid: existing.expo_pid, proc: null, startedAt: Date.now() };
     return { port: existing.expo_port, alreadyRunning: true };
   }
 
   const port = getExpoPort(userId);
   const repoPath = await ensureRepo(userId, 'codeit-app');
 
-  const expoCli = path.join(repoPath, 'node_modules', 'expo', 'bin', 'cli');
-  if (!fs.existsSync(expoCli)) {
-    console.log(`[ExpoProcess] Running npm install for user ${userId}...`);
+  const expoDir = path.join(repoPath, 'node_modules', 'expo');
+  if (!fs.existsSync(expoDir)) {
+    console.log(`[ExpoProcess] Installing dependencies in ${repoPath}...`);
     execSync('npm install', { cwd: repoPath, stdio: 'inherit' });
   }
 
-  const nodePath = '/usr/bin/node';
-  const proc = spawn(nodePath, [expoCli, 'start', '--web', '--port', String(port), '--host', 'localhost'], {
+  const { command, args } = resolveExpoCli(repoPath);
+  const fullArgs = [...args, 'start', '--web', '--port', String(port), '--host', 'localhost'];
+  console.log(`[ExpoProcess] Starting: ${command} ${fullArgs.join(' ')} (cwd: ${repoPath})`);
+
+  const proc = spawn(command, fullArgs, {
     cwd: repoPath,
-    stdio: 'ignore',
-    detached: true,
-    env: { ...process.env, PORT: String(port) },
+    stdio: ['ignore', 'pipe', 'pipe'],
+    detached: !isWindows,
+    env: { ...process.env, PORT: String(port), BROWSER: 'none' },
+  });
+
+  proc.stdout?.on('data', (data: Buffer) => {
+    console.log(`[Expo:${userId}] ${data.toString().trim()}`);
+  });
+  proc.stderr?.on('data', (data: Buffer) => {
+    console.error(`[Expo:${userId}] ${data.toString().trim()}`);
   });
 
   const pid = proc.pid!;
 
   proc.on('error', (err) => {
     console.error(`[ExpoProcess] Failed to start for user ${userId}:`, err);
+    delete running[userId];
   });
   proc.on('exit', (code, signal) => {
     console.log(`[ExpoProcess] Exited for user ${userId} (pid ${pid}) code=${code} signal=${signal}`);
@@ -84,7 +105,6 @@ export async function startExpo(userId: string, repoRoot: string): Promise<{ por
 
   console.log(`[ExpoProcess] Started for user ${userId} on port ${port} (PID ${pid})`);
 
-  // Persist port + pid so we can reattach after server restarts
   await ensureAppRecord(userId, 'codeit-app', port, pid);
 
   return { port, alreadyRunning: false };
@@ -93,10 +113,27 @@ export async function startExpo(userId: string, repoRoot: string): Promise<{ por
 export function stopExpo(userId: string): boolean {
   const p = running[userId];
   if (!p) return false;
-  if (p.proc) p.proc.kill('SIGTERM');
-  else if (p.pid) {
+
+  console.log(`[ExpoProcess] Stopping for user ${userId} (pid: ${p.pid})`);
+
+  if (p.proc) {
+    if (isWindows) {
+      try {
+        execSync(`taskkill /pid ${p.proc.pid} /T /F`, { stdio: 'ignore' });
+      } catch {
+        p.proc.kill();
+      }
+    } else {
+      try {
+        process.kill(-p.proc.pid!, 'SIGTERM');
+      } catch {
+        p.proc.kill('SIGTERM');
+      }
+    }
+  } else if (p.pid) {
     try { process.kill(p.pid, 'SIGTERM'); } catch {}
   }
+
   delete running[userId];
   clearAppPid(userId, 'codeit-app').catch(() => {});
   return true;
@@ -124,4 +161,10 @@ async function ensureAppRecord(userId: string, repoName: string, port: number, p
   }
   await updateAppPort(userId, repoName, port, pid);
   console.log(`[ExpoProcess] DB record updated: subdomain=${subdomain} port=${port} pid=${pid}`);
+}
+
+export function stopAllExpo(): void {
+  for (const userId of Object.keys(running)) {
+    stopExpo(userId);
+  }
 }

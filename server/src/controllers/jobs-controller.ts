@@ -1,17 +1,17 @@
 import { Router, Request, Response } from 'express';
 import { jobQueue } from '../queue/index.js';
 import { jobRequestSchema } from '../validators/index.js';
-import { requireAuth, AuthRequest } from '../middleware/auth.js';
+import { requireAuth } from '../middleware/auth.js';
 
 const router = Router();
 
-router.post('/', requireAuth, async (req: Request, res: Response) => {
-  try {
-    const { auth } = req as AuthRequest;
+router.use(requireAuth);
 
+router.post('/', async (req: Request, res: Response) => {
+  try {
     const parsed = jobRequestSchema.safeParse({
       ...req.body,
-      userId: auth.userId,
+      userId: req.auth!.userId,
     });
 
     if (!parsed.success) {
@@ -22,7 +22,10 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
       return;
     }
 
-    const job = await jobQueue.enqueue(parsed.data);
+    const job = await jobQueue.enqueue({
+      ...parsed.data,
+      userId: req.auth!.userId,
+    });
 
     res.status(201).json({
       jobId: job.id,
@@ -35,7 +38,24 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
   }
 });
 
-router.get('/:id', requireAuth, (req: Request, res: Response) => {
+router.get('/', (req: Request, res: Response) => {
+  const userId = req.auth!.userId;
+  const jobs = jobQueue.getJobsByUser(userId);
+  res.json(
+    jobs.map((j) => ({
+      jobId: j.id,
+      status: j.status,
+      message: j.message,
+      error: j.error,
+      prompt: j.prompt.substring(0, 100),
+      commitSha: j.commitSha,
+      createdAt: j.createdAt,
+      updatedAt: j.updatedAt,
+    })),
+  );
+});
+
+router.get('/:id', (req: Request, res: Response) => {
   const job = jobQueue.getJob(req.params.id);
 
   if (!job) {
@@ -43,8 +63,7 @@ router.get('/:id', requireAuth, (req: Request, res: Response) => {
     return;
   }
 
-  const { auth } = req as AuthRequest;
-  if (job.userId !== auth.userId) {
+  if (job.userId !== req.auth!.userId) {
     res.status(403).json({ error: 'Forbidden' });
     return;
   }

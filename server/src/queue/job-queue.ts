@@ -4,12 +4,18 @@ import { insertJob, updateJobStatus } from '../db/index.js';
 
 type JobUpdateCallback = (job: Job) => void;
 
+const JOB_TTL = 60 * 60 * 1000; // 1 hour
+
 class JobQueue {
   private jobs = new Map<string, Job>();
   private queue: string[] = [];
   private processing = false;
   private onUpdate: JobUpdateCallback | null = null;
   private processor: ((job: Job) => Promise<void>) | null = null;
+
+  constructor() {
+    setInterval(() => this.purgeExpired(), 10 * 60 * 1000).unref();
+  }
 
   setProcessor(fn: (job: Job) => Promise<void>): void {
     this.processor = fn;
@@ -50,6 +56,14 @@ class JobQueue {
 
   getJob(id: string): Job | undefined {
     return this.jobs.get(id);
+  }
+
+  getJobsByUser(userId: string): Job[] {
+    const result: Job[] = [];
+    for (const job of this.jobs.values()) {
+      if (job.userId === userId) result.push(job);
+    }
+    return result.sort((a, b) => b.createdAt - a.createdAt);
   }
 
   updateJob(id: string, updates: Partial<Job>): Job | undefined {
@@ -93,6 +107,26 @@ class JobQueue {
 
     this.processing = false;
     this.processNext();
+  }
+
+  stats(): { total: number; queued: number; processing: number; completed: number; failed: number } {
+    let queued = 0, processing = 0, completed = 0, failed = 0;
+    for (const job of this.jobs.values()) {
+      if (job.status === 'queued') queued++;
+      else if (job.status === 'failed') failed++;
+      else if (job.status === 'completed') completed++;
+      else processing++;
+    }
+    return { total: this.jobs.size, queued, processing, completed, failed };
+  }
+
+  private purgeExpired(): void {
+    const now = Date.now();
+    for (const [id, job] of this.jobs) {
+      if ((job.status === 'completed' || job.status === 'failed') && now - job.updatedAt > JOB_TTL) {
+        this.jobs.delete(id);
+      }
+    }
   }
 }
 

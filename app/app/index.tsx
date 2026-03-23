@@ -1,11 +1,11 @@
 import React from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts';
 import { HomeScreen, AuthScreen } from '../screens';
 import { ChatWidget } from '../components/ChatWidget';
 
 export default function Index() {
-  const { token, user, loading, login, logout } = useAuth();
+  const { token, user, loading, login } = useAuth();
 
   if (loading) {
     return (
@@ -27,8 +27,8 @@ export default function Index() {
 
   return (
     <>
-      <HomeScreen user={user} token={token} onLogout={logout} />
-      <ChatWidget token={token} userId={user?.id ?? ''} />
+      <HomeScreen user={user} token={token} />
+      <ChatWidget />
     </>
   );
 }

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,8 @@ import {
 } from 'react-native';
 import { useTheme } from '../hooks/useTheme';
 import { useWebSocket } from '../hooks/useWebSocket';
-import { sendPrompt } from '../services/api';
+import { useAuth } from '../contexts';
+import { sendPrompt, setAuthToken } from '../services/api';
 import { config, generateId, formatTimestamp } from '../utils';
 import { spacing, fontSize, borderRadius } from '../theme';
 
@@ -25,16 +26,12 @@ interface Message {
   status?: string;
 }
 
-interface ChatWidgetProps {
-  token: string;
-  userId: string;
-}
-
 const WINDOW_HEIGHT = Dimensions.get('window').height;
 const REPO_NAME = 'codeit-app';
 
-export function ChatWidget({ token, userId }: ChatWidgetProps) {
+export function ChatWidget() {
   const theme = useTheme();
+  const { token, user } = useAuth();
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([
@@ -49,10 +46,15 @@ export function ChatWidget({ token, userId }: ChatWidgetProps) {
   const slideAnim = useRef(new Animated.Value(WINDOW_HEIGHT)).current;
   const flatListRef = useRef<FlatList>(null);
 
+  useEffect(() => {
+    setAuthToken(token);
+  }, [token]);
+
   const handleWSMessage = useCallback((data: unknown) => {
     const msg = data as { type: string; payload: Record<string, unknown> };
     if (msg.type === 'job_update') {
-      const payload = msg.payload as { status: string; message?: string; error?: string; commitSha?: string };
+      const payload = msg.payload as { jobId?: string; status: string; message?: string; error?: string; commitSha?: string };
+
       const statusText =
         payload.status === 'completed'
           ? `Done! Commit: ${payload.commitSha ?? 'applied'}`
@@ -102,7 +104,7 @@ export function ChatWidget({ token, userId }: ChatWidgetProps) {
 
   const handleSend = async () => {
     const text = input.trim();
-    if (!text || loading) return;
+    if (!text || loading || !token) return;
 
     const userMsg: Message = {
       id: generateId(),
@@ -181,6 +183,8 @@ export function ChatWidget({ token, userId }: ChatWidgetProps) {
       </View>
     );
   };
+
+  if (!token) return null;
 
   return (
     <>
